@@ -1,22 +1,39 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Sep  1 14:48:14 2018
+Created on Wed May 29 10:03:49 2019
 
 @author: chenxi
-功能：实现机器学习实战得adaboost算法
+
 """
+
 import numpy as np
+
 import matplotlib.pyplot as plt
-def loadsimpdata():
-    datmat=np.matrix([   #构建样本矩阵
-            [1.,2.1],
-            [2.,1.1],
-            [1.3,1.],
-            [1.,1.],
-            [2.,1.]     
-                   ])
-    classlabels=[1.0,1.0,-1.0,-1.0,1.0]
-    return datmat,classlabels
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import roc_curve,auc
+def loadSimpData():
+    datMat = np.matrix([[ 1. ,  2.1],
+        [ 2. ,  1.1],
+        [ 1.3,  1. ],
+        [ 1. ,  1. ],
+        [ 2. ,  1. ]])
+    classLabels = [1.0, 1.0, -1.0, -1.0, 1.0]   
+    return datMat,classLabels
+def showdata(datMat,Labels):
+    data_plus = []                                  #正样本
+    data_minus = []                                 #负样本
+    for i in range(len(Labels)):
+        if Labels[i]>0:
+            data_plus.append(datMat[i])
+        else:
+            data_minus.append(datMat[i])
+    data_plus_np = np.array(data_plus)                                        
+    data_minus_np = np.array(data_minus)   
+    plt.scatter(np.transpose(data_plus_np)[0],np.transpose(data_plus_np)[1],c="#ff1212",marker="v")
+    plt.scatter(np.transpose(data_minus_np)[0],np.transpose(data_minus_np)[1],marker="<")
+    plt.show()
+  
 """
     单层决策树分类函数
     Parameters:
@@ -27,184 +44,208 @@ def loadsimpdata():
     Returns:
         retArray - 分类结果
 """
-def stumpclassify(datamatrix,dimen,threshval,threshineq):
-    retarray=np.ones((np.shape(datamatrix)[0],1)) 
-    #构建1矩阵，shape(datamatrix)[0]表示获得datmat的行数，如果是(datamatrix)[1]则表示获取列数，后面的1表示以行的形式输出，若缺失1则表示以列的形式输出
-    if threshineq == 'lt':
-        retarray[datamatrix[:,dimen]<=threshval]=-1.0#datamatrix中的第dimen列的所有样本取值，即第dimen个特征的每个样本的数据取值
+def stumpClassify(dataMatrix,dimen,threshVal,threshIneq):#just classify the data
+    retArray =np.ones((np.shape(dataMatrix)[0],1))
+    if threshIneq == 'lt':
+        retArray[dataMatrix[:,dimen] <= threshVal] = -1.0
     else:
-        retarray[datamatrix[:,dimen]>threshval]=-1.0
-    return retarray
-
-"""
-    找到数据集上最佳的单层决策树
-    Parameters:
-        dataArr - 数据矩阵
-        classLabels - 数据标签
-        D - 样本权重
-    Returns:
-        bestStump - 最佳单层决策树信息
-        minError - 最小误差
-        bestClasEst - 最佳的分类结果
-        这里lt表示less than，表示分类方式，对于小于阈值的样本点赋值为-1，gt表示greater than，也是表示分类方式，对于大于阈值的样本点赋值为-1
-"""       
-def buildstump(dataarr,classlabels,D):
-    datamatrix= np.mat(dataarr);
-    labelmat=np.mat(classlabels).T
-    m,n=np.shape(datamatrix)   #m为行数，即数据样本的个数；n为列数，即样本特征数
-    numsteps=10.0
-    beststump={}
-    bestclassest=np.mat(np.zeros((m,1)))
-    minerror=float(np.inf)
-    for i in range(n):                                                            #遍历所有特征,range函数为左闭右开区间函数，即range（0，10）=[0,10)。此处的n为样本所包含的特征数
-        rangemin = datamatrix[:,i].min(); rangemax = datamatrix[:,i].max()        #找到特征中最小的值和最大值
-        stepsize = (rangemax - rangemin) / numsteps                                #将区间值分为numsteps段 ,计算步长
-        for j in range(-1, int(numsteps) + 1):                                     
-            for inequal in ['lt', 'gt']:                                          #大于和小于的情况，均遍历。lt:less than，gt:greater than
-                threshval = (rangemin + float(j) * stepsize)                     #计算阈值
-                predictedvals = stumpclassify(datamatrix, i, threshval, inequal)#计算分类结果
-                errarr = np.mat(np.ones((m,1)))                                 #初始化误差矩阵
-                errarr[predictedvals == labelmat] = 0                             #分类正确的,赋值为0
-                weightederror = D.T * errarr                                      #计算误差
-               # print("split: dim %d, thresh %.2f, thresh ineqal: %s, the weighted error is %.3f" % (i, threshval, inequal, weightederror))
-                if weightederror < minerror:                                     #找到误差最小的分类方式,如果获得的错误率比最小错误率都小，则替换当前的minerror，最好的bestclassest分类集，最好的树桩参数
-                    minerror = weightederror
-                    bestclassest = predictedvals.copy()
-                    beststump['dim'] = i
-                    beststump['thresh'] = threshval
-                    beststump['ineq'] = inequal
-    return beststump,minerror,bestclassest
+        retArray[dataMatrix[:,dimen] > threshVal] = -1.0
+    return retArray    
 
 
 
-
-
-
-
-def adaboosttrainds(dataarr,classlabels,numit=40):
-    weakclassarr=[]
-    m = np.shape(dataarr)[0]   #样本数量
-    D=np.mat(np.ones((m,1))/m)   #初始化样本权重
-    aggclassest=np.mat(np.zeros((m,1)))
-    for i in range(numit):
-        beststump,error,classest=buildstump(dataarr,classlabels,D)  #构建单层决策树
-        #print('D:',D.T)
-        alpha=float(0.5*np.log((1.0-error)/max(error,1e-16)))   #计算弱学习算法权重alpha,使error不等于0,因为分母不能为0,1e-16表示一个很小的数，当error为0时，取1e-16接近0
-        beststump['alpha']=alpha     #存储当前最优树状的权重
-        weakclassarr.append(beststump)   #存储当前的决策树
-        #print("classest:",classest.T)   #输出当前的分类集
-        expon=np.multiply(-1*alpha*np.mat(classlabels).T,classest) #计算e的指数项,     np.multiply(A,B)表示u数组对应元素位置相乘
-        D=np.multiply(D,np.exp(expon))    #更新权值中的分子部分的计算方法
-        D=D/D.sum()#更新新的样本权重矩阵
-        #计算AdaBoost误差，当误差为0的时候，退出循环
-        aggclassest +=alpha*classest   #生成强分类器的分类结果
-        #print("aggclassest:",aggclassest)
-        aggerrors=np.multiply(np.sign(aggclassest) !=np.mat(classlabels).T,np.ones((m,1)))  #计算当前强分类器的误差
-        errorrate=aggerrors.sum()/m
-        #print("total error:",errorrate,"\n")
-        if errorrate == 0.0:break
-    return weakclassarr,aggclassest
-
-
-
-def adaclassfy(dattoclass,classifierarr):
-    datamatrix=np.mat(dattoclass)
-    m=np.shape(datamatrix)[0]         #shape(datamatrix)[0]表示获得datmat的行数，
-    aggclassest=np.mat(np.zeros((m,1)))
-    for i in range(len(aggclassest)):
-        classest=stumpclassify(datamatrix,classifierarr[i]['dim'],classifierarr[i]['thresh'],classifierarr[i]['ineq'])
-        aggclassest +=classifierarr[i]['alpha']*classest
-        print(aggclassest)
-    return np.sign(aggclassest)
-
-
-# 自适应数据加载函数，该函数能够自动检测出特征的数目，假定最后一个特征是类别标签
-def loaddataset(fileName) :
-    numFeat = len(open(fileName).readline().split('\t'))
-    dataMat = []; labelMat = []
-    fr = open(fileName)
-    for line in fr.readlines():#直接一步到位，666
-        lineArr = []
-        curLine = line.strip().split('\t')
-        for i in range(numFeat - 1) :
-            lineArr.append(float(curLine[i]))
-        dataMat.append(lineArr)    #生成一个样本为一个矩阵的多个样本列表
-        labelMat.append(float(curLine[-1]))  #生成所有样本的类别标签
-    return dataMat,labelMat
-
+def buildStump(dataArr,classLabels,D):
+    dataMatrix = np.mat(dataArr); labelMat = np.mat(classLabels).T
     
-def irisdata(filename):    #用于处理iris数据集来作为训练和测试数据集
+    m,n = np.shape(dataMatrix)
+    numSteps = 10.0; bestStump = {}; bestClasEst = np.mat(np.zeros((m,1)))
+    minError = np.inf #init error sum, to +infinity
+    for i in range(n):#loop over all dimensions
+        rangeMin = dataMatrix[:,i].min(); rangeMax = dataMatrix[:,i].max();
+        stepSize = (rangeMax-rangeMin)/numSteps
+        for j in range(-1,int(numSteps)+1):#loop over all range in current dimension
+            for inequal in ['lt', 'gt']: #go over less than and greater than
+                threshVal = (rangeMin + float(j) * stepSize)
+                predictedVals = stumpClassify(dataMatrix,i,threshVal,inequal)#call stump classify with i, j, lessThan
+                errArr = np.mat(np.ones((m,1)))
+                errArr[predictedVals == labelMat] = 0
+                weightedError = D.T*errArr  #calc total error multiplied by D
+                #print("j:%d,split: dim %d, thresh %.2f, thresh ineqal: %s, the weighted error is %.3f" % (j,i, threshVal, inequal, weightedError))
+                if weightedError < minError:
+                    minError = weightedError
+                    bestClasEst = predictedVals.copy()
+                    bestStump['dim'] = i
+                    bestStump['thresh'] = threshVal
+                    bestStump['ineq'] = inequal
+    return bestStump,minError,bestClasEst 
+   
+def adaBoostTrainDS(dataArr,classLabels,numIt=40):
+    weakClassArr = []
+    m = np.shape(dataArr)[0]
+    D = np.mat(np.ones((m,1))/m)   #init D to all equal
+    aggClassEst = np.mat(np.zeros((m,1)))
+    for i in range(numIt):#numIt为迭代次数
+        bestStump,error,classEst = buildStump(dataArr,classLabels,D)#build Stump
+        #print "D:",D.T
+        alpha = float(0.5*np.log((1.0-error)/max(error,1e-16)))#calc alpha, throw in max(error,eps) to account for error=0
+        bestStump['alpha'] = alpha  
+        weakClassArr.append(bestStump)                  #store Stump Params in Array
+        #print "classEst: ",classEst.T
+        expon = np.multiply(-1*alpha*np.mat(classLabels).T,classEst) #exponent for D calc, getting messy
+        D = np.multiply(D,np.exp(expon))                              #Calc New D for next iteration
+        D = D/D.sum()
+        #calc training error of all classifiers, if this is 0 quit for loop early (use break)
+        aggClassEst += alpha*classEst
+        #print "aggClassEst: ",aggClassEst.T
+       # print("fxxk:",np.multiply(np.sign(aggClassEst) != np.mat(classLabels).T,np.ones((m,1))))
+        aggErrors = np.multiply(np.sign(aggClassEst) != np.mat(classLabels).T,np.ones((m,1)))#这个前面的sign函数是阶跃函数，然后对比之后获得true和false，相乘之后true*1=1，false*1=0
+        errorRate = aggErrors.sum()/m
+        #print ("total error: ",errorRate)
+        if errorRate == 0.0: break
+    return weakClassArr,aggClassEst      
+def adaClassify(datToClass,classifierArr):
+    dataMatrix = np.mat(datToClass)#do stuff similar to last aggClassEst in adaBoostTrainDS
+    m = np.shape(dataMatrix)[0]
+    aggClassEst = np.mat(np.zeros((m,1)))
+    for i in range(len(classifierArr)):
+        classEst = stumpClassify(dataMatrix,classifierArr[i]['dim'],\
+                                 classifierArr[i]['thresh'],\
+                                 classifierArr[i]['ineq'])#call stump classify
+        aggClassEst += classifierArr[i]['alpha']*classEst
+    return aggClassEst
+    #return np.sign(aggClassEst)
+
+
+
+
+
+def loaddataset(filename):
+    dataset=[]
+    labels=[]
     fr=open(filename)
-    lists=fr.readlines()
-    listdata=[]
-    for list in lists:
-        #Python strip() 方法用于移除字符串头尾指定的字符（默认为空格或换行符）或字符序列。
-         #注意：该方法只能删除开头或是结尾的字符，不能删除中间部分的字符。   split()表示分割标识符
-        listdata.append(list.strip().split(','))
-    classlabels1=[]
-    datamat1=[]
-    for i in range(len(listdata)):  #[0,len)的长度，故不需要加一
-        classlabels1.append(listdata[i][-1])
-        datamat1.append(listdata[i][0:-2])#选取[0,4)的元素
-        datamat=np.mat(datamat1).astype(float)   #先将列表数据转换为矩阵，然后再将矩阵的元素转换为float型数据
-        classlabels=np.mat(classlabels1).astype(float)
-    return classlabels,datamat
-    
+    for line in fr.readlines():
+        arr=[]
+        line_trip=line.strip().split('\t')
+        for i in range(len(line_trip)-1):
+            arr.append(float(line_trip[i]))
+        dataset.append(arr)
+        labels.append(float(line_trip[-1]))
+    return dataset,labels
+        
 
 
-#非均衡分类问题
 
-def plotroc(predstrengths,classlabels):
-    
-    cur=(1.0,1.0)
-    ysum=0.0
-    numposclas=sum(np.array(classlabels)==1.0)#矩阵里面值为1时返回值为1，否则为0
-    ystep=1/float(numposclas)#正例的倒数，y轴的步数
-    xstep=1/float(len(classlabels)-numposclas)#反例的倒数，x轴的步数
-    sortedindicies=predstrengths.argsort()#对可信度进行排序
-    fig=plt.figure()
-    fig.clf()
-    ax=plt.subplot(111)
-    for index in sortedindicies.tolist()[0]:#tolist()作用是将列表sortedindicies从小到大的排列
-        if classlabels[index]==1.0:
-            delx=0;dely=ystep;
+def plotROC(predStrengths, classLabels):    
+    cur = (1.0,1.0) #cursor
+    ySum = 0.0 #variable to calculate AUC
+    numPosClas = sum(np.array(classLabels)==1.0)#真实值为正例的样本数
+    yStep = 1/float(numPosClas); xStep = 1/float(len(classLabels)-numPosClas)#真实值为负例的样本数
+    sortedIndicies = predStrengths.argsort()#get sorted index, it's reverse
+    fig = plt.figure()#画布
+    fig.clf()#清除画布
+    ax = plt.subplot(111)
+    #loop through all the values, drawing a line segment at each point
+    for index in sortedIndicies.tolist()[0]:
+        if classLabels[index] == 1.0:
+            delX = 0; delY = yStep;
         else:
-            delx=xstep;dely=0;
-            ysum +=cur[1]
-        ax.plot([cur[0],cur[0]-delx],[cur[1],cur[1]-dely],c='b')#分别从1.0开始减少x轴，y轴的值
-        cur=(cur[0]-delx,cur[1]-dely)#循环一次降低一个步长
+            delX = xStep; delY = 0;
+            ySum += cur[1]
+        #draw line from cur to (cur[0]-delX,cur[1]-delY)
+        ax.plot([cur[0],cur[0]-delX],[cur[1],cur[1]-delY], c='b')  
+        cur = (cur[0]-delX,cur[1]-delY)
     ax.plot([0,1],[0,1],'b--')
-    plt.xlabel('false positive rate');plt.ylabel('true positive rate')
-    plt.title('roc curve for adaboost horse colic detection system')
-    ax.axis([0,1,0,1])
+    plt.xlabel('False positive rate'); plt.ylabel('True positive rate')
+    plt.title('ROC curve for AdaBoost horse colic detection system')
+    ax.axis([0,1,0,1])#坐标轴范围，第一个为x轴，第二个为y轴
     plt.show()
-    print('the area under the curve is :',ysum*xstep)
+    print("the Area Under the Curve is: ",ySum*xStep)       
 
-    
-                    
-    
+def ROC_bySKlearn(trainlabel,pre_scores):
+    fpr,tpr,threshold=roc_curve(trainlabel,pre_scores)
+    roc_auc=auc(fpr,tpr)
+    plt.figure()
 
-if __name__=='__main__':   
-    #绘制roc曲线
-    dataarr,labelarr=loaddataset('horseColicTraining2.txt')
-    classifierarr,aggclassest=adaboosttrainds(dataarr,labelarr,10)
-    plotroc(aggclassest.T,labelarr)
+    plt.figure(figsize=(5,5))
+    plt.plot(fpr,tpr,color='darkorange',lw=2,label='ROC curve (area = %0.5f)' % roc_auc)
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0,1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic example')
+    plt.legend(loc="lower right")
+    plt.show()
+
+def adaboostbysklearn(dataset,labels,dataset_test,labels_test):
+    bdt=AdaBoostClassifier(base_estimator=DecisionTreeClassifier(max_depth=2),\
+                           algorithm = "SAMME", n_estimators = 50)
+    bdt.fit(dataset,labels)
+    pre=bdt.predict(dataset)
+    errarr=np.ones((len(pre),1))
+    train_err_rate=(errarr[pre==labels].sum())/len(pre)
+    print('训练错误率:%0.3f',train_err_rate,'\n')
+    
+    pre_test=bdt.predict(dataset_test)
+    errarr_test=np.ones((len(pre_test),1))
+    test_err_rate=(errarr_test[pre_test==labels_test].sum())/len(pre_test)
+    print('测试错误率:%0.3f',test_err_rate,'\n')
+    
+    train_pre_pro=bdt.predict_proba(dataset_test)
+    return process_pro(train_pre_pro)
+
+def process_pro(pre):
+    pre_pro=[]
+    for arr in pre:
+        arr1=[]
+        if(arr[0]>arr[1]):
+            arr1.append(-arr[0])
+        else:
+            arr1.append(arr[1])
+        pre_pro.append(arr1)
+    pre_pro_matrix=np.matrix(pre_pro)
+    #print(pre_pro_matrix)
+    return pre_pro_matrix
+    
+if __name__=='__main__':
+
+   # datMat,classLabels=loadSimpData()
+    
+    dataset_train,labels_train=loaddataset("horseColicTraining2.txt")  
+    dataset_test,labels_test=loaddataset("horseColicTest2.txt") 
+    weakClassArr,aggClassEst=adaBoostTrainDS(dataset_train,labels_train,numIt=50)
+    aggClassEst_test=adaClassify(dataset_test,weakClassArr)
+   # labels_pre=adaClassify(dataset_test,weakClassArr)
+    test_pre_pro=adaboostbysklearn(dataset_train,labels_train,dataset_test,labels_test)
+    #pre_pro_matrix=process_pro(train_pre_pro)
+    ROC_bySKlearn(labels_test,aggClassEst_test)
+    
+    #np.set_printoptions(threshold=np.inf)
+    
+    print("通过SKlearn训练的结果")
+    ROC_bySKlearn(labels_test,test_pre_pro)
+    
+    
+   # errarr=np.mat(np.ones((67,1)))
+   # a=errarr[labels_pre!=np.mat(labels_test).T]
+    #np.set_printoptions(threshold=np.inf)
+    #print(aggClassEst)
+   # print(a.sum())
+    #print((errarr[labels_pre!=np.mat(labels_test).T].sum())/67)
+    
+   
+   
+#aggErrors = np.multiply(np.sign(aggClassEst) != np.mat(classLabels).T,np.ones((m,1)))
+    
+ 
     
     
     
     
     
-"""    
-   #实现利用iris的部分数据作为训练数据集，部分作为测试数据集进行测试从而获得结果，发现没有错误正确率为100%，分类器比较好
-    classlabels,datamat=irisdata('iris.txt')
-    classifierarray=adaboosttrainds(datamat,classlabels,30)
-    fr=open('iris-test.txt')
-    lists=fr.readlines()
-    datatest=[]
-    for list in lists:    
-        datatest.append(list.strip().split(','))#重写一编这部分代码的原因是上面函数irisdata（）输出的是包含多个数据样本的一个矩阵，而我们需要的是包含一个样本的数据矩阵
-    for j in range(len(datatest)):
-        a=np.mat(datatest[j][0:4]).astype(float)
-        result=adaclassfy(a,classifierarray)
-        print("the result is %d:",result,"the true result is %d:",datatest[j][-1])
-"""
+    
+    
+    
+    
+    
+    

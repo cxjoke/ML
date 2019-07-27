@@ -1,31 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Sep 11 19:42:06 2018
+Created on Thu May 30 16:19:03 2019
 
 @author: chenxi
 """
-from numpy import *
+import numpy as np
 
-def loadDataSet():
-    dataMat = []; labelMat = []
-    fr = open('testSet.txt')
-    for line in fr.readlines():
-        lineArr = line.strip().split()
-        dataMat.append([1.0, float(lineArr[0]), float(lineArr[1])])
-        labelMat.append(int(lineArr[2]))
-    return dataMat,labelMat
 
-def sigmoid(inX):
-    return 1.0/(1+exp(-inX))
+class person():
+    empCount = 0
 
-def gradAscent(dataMatIn, classLabels):
-    dataMatrix = mat(dataMatIn)             #convert to NumPy matrix
-    labelMat = mat(classLabels).transpose() #convert to NumPy matrix
-    m,n = shape(dataMatrix)
-    alpha = 0.001
-    maxCycles = 500
-    weights = ones((n,1))
-    for k in range(maxCycles):              #heavy on matrix operations
-        h = sigmoid(dataMatrix*weights)     #matrix mult
-        error = (labelMat - h)              #vector subtraction
-        weights = weights + alpha * dataMatrix.transpose()* error #matrix mult
+    def __init__(self,name,salary):
+        self.name = name
+        self.salary = salary
+        person.empCount+=1
+    def display(self):
+        print("the person num is :%d"%person.empCount)
+    def diplaypersoninfo(self):
+        print("name:%d,Salary:%d"%self.name,%self.salary)
+    
+    
+
+
+per1=person(6,5000)
+per2=person(6,6000)
+per1.diplaypersoninfo()
